@@ -1,0 +1,389 @@
+# SDD Context Index
+#
+# 用途：作为 `.ai-sdd/context/` 的唯一活跃入口。
+# 读取方式：先按 stage/scope 筛选，再按 load_policy 最小加载。
+#
+# 与 openspec/config.yaml 的双向关系：
+#   - openspec/config.yaml 的 context 段落引用本文件作为上下文入口（见
+#     openspec-config.yaml.tpl line 7-9 与 line 23-27 的"上下文加载"小节）。
+#   - 本文件的 path/scope/stage/load_policy 字段必须与
+#     openspec/config.yaml 的 rules.<phase> 小节保持一致：
+#     (1) 新增/删除本文件的 path 条目时，同步检查 openspec/config.yaml 的
+#         rules.proposal/specs/design/tasks/apply/verify 中是否仍引用该路径；
+#     (2) 修改本文件的 stage 或 scope 字段时，同步检查
+#         rules.<phase> 的 "按 context-index 的 <phase> + 当前 scope 最小加载上下文" 约束；
+#     (3) 两文件均不直接互引字段；同步由 context-harvest / context-review /
+#         render.py 渲染（本工作流）三个动作完成。
+#   - 同步失败的兜底：本文件是"事实入口"（path/scope/stage/load_policy 真源），
+#     openspec/config.yaml 是"约束索引"（按 stage 触发加载）。
+#     冲突时以本文件为准，并在 review-notes 记录差异，等待 context-harvest
+#     周期性回收修正 openspec/config.yaml。
+#
+# path:
+#   - 以 `.md` 结尾：直接按需读取单文件
+#   - 以 `/` 结尾：目录型上下文；先读该目录 README.md，再按关键词/场景读取具体文件
+#
+# scope:
+#   - all：适用于所有 scope，但不表示始终加载
+#   - backend / frontend-h5 / frontend-pc / components：仅适用于对应范围
+#   - 可使用数组表达多个范围
+#   - 注：fullstack 不是 scope 名；fullstack 仓库按 derive_scopes 规则归入
+#     backend（+ frontend-{frontend_type}）
+#   - components 是独立 scope 名；type=components 的共享组件库仓库归入此 scope
+#
+# stage:
+#   - proposal / specs / design / tasks / apply / verify / all
+#
+# load_policy:
+#   - always：每次任务启动都应读取
+#   - stage-start：进入匹配阶段时读取
+#   - stage-end：阶段产物完成后读取并自检
+#   - on-demand：当前问题、候选探索或事实查证需要时读取；目录型上下文只先读 README/索引，再按候选或证据需求加载具体文件
+#
+# triggers:
+#   - on-demand 的命中提示。当前问题、产物内容、证据需求或编码落点命中任一 trigger 时，必须加载该上下文。
+#   - 目录型上下文命中后，只先读 README/索引，再按候选项继续读取具体文件。
+#   - triggers 是强制路由提示，不是关键词搜索的唯一依据；同义表达、中文业务说法、代码符号也算命中。
+#
+# 当前 change 专属上下文不在本文件固定列出。
+# 处理某个 change 时，仅当 `.ai-sdd/context/changes/{change-name}/README.md`
+# 存在时，先读该 README，再按当前阶段和问题加载具体文件。
+# 若 change README 列出外部报文契约、消息格式、通知模板占位符、接口协商稿、字段映射、补充设计约束等专属上下文，
+# 当前问题命中对应业务/接口/报文/配置时必须按 README 加载，不要只停留在 raw 原文。
+
+# SDD 框架文档
+
+- path: sdd/工作区布局（workspace-layout）.md
+  summary: "工作区目录结构、路径约定、GitNexus 索引"
+  scope: all
+  stage: all
+  load_policy: always
+
+- path: sdd/上下文治理规则（context-governance）.md
+  summary: "上下文最小加载、证据优先、冲突处理和大型资料按需搜索规则"
+  scope: all
+  stage: all
+  load_policy: always
+
+- path: sdd/GitNexus使用规则（gitnexus-rules）.md
+  summary: "GitNexus repo 参数、impact/detect_changes、调试、重构、资源和索引刷新规则"
+  scope: all
+  stage: [design, tasks, apply, verify]
+  load_policy: on-demand
+  triggers:
+    - "需要用 GitNexus 查询调用链、上下文、影响面或变更范围"
+    - "准备修改现有函数、类、方法、共享符号或 API 路由"
+    - "需要做 impact analysis、detect_changes、rename 或 route/api impact"
+
+- path: sdd/需求提案检查清单（proposal-checklist）.md
+  summary: "Proposal 阶段的质量自检清单"
+  scope: all
+  stage: proposal
+  load_policy: stage-end
+
+- path: sdd/需求规格检查清单（specs-checklist）.md
+  summary: "Specs 阶段的质量自检清单"
+  scope: all
+  stage: specs
+  load_policy: stage-end
+
+- path: sdd/设计发现模板（design-brief-template）.md
+  summary: "Design brief 模板：核心设计方向、场景/playbook、工程归属、核心流程和人类决策点"
+  scope: all
+  stage: design
+  load_policy: on-demand
+  triggers:
+    - "需要输出 design brief、设计发现、场景拆分或 playbook 命中说明"
+    - "需求复杂，需要先形成核心设计方向、证据清单和人类决策点"
+
+- path: sdd/系统设计检查清单（design-checklist）.md
+  summary: "Design 阶段的质量自检清单"
+  scope: all
+  stage: design
+  load_policy: stage-end
+
+- path: sdd/分层任务模板（layered-task-template）.md
+  summary: "后端分层任务的标准 Phase 结构模板"
+  scope: backend
+  stage: [tasks, apply]
+  load_policy: on-demand
+  triggers:
+    - "tasks 需要拆分后端数据库层、实体层、DAO层、SV/Service层、CSF/API层"
+    - "实现涉及多层后端改动、DDL、BO/DAO/Engine 或接口暴露"
+
+- path: sdd/测试阶段规范（testing-phases）.md
+  summary: "测试阶段 A（Mock 单元测试）和 B（集成冒烟测试）的规范"
+  scope: backend
+  stage: [tasks, apply]
+  load_policy: on-demand
+  triggers:
+    - "需要设计或拆分后端单元测试、Mock 测试、集成冒烟测试"
+    - "任务包含测试数据、runner、测试报告或集成验证步骤"
+
+- path: sdd/开发任务分解清单（task-checklist）.md
+  summary: "Tasks 阶段的质量自检清单"
+  scope: all
+  stage: tasks
+  load_policy: stage-end
+
+- path: sdd/编码实现检查清单（apply-checklist）.md
+  summary: "Apply 阶段的质量自检清单"
+  scope: all
+  stage: apply
+  load_policy: stage-end
+
+- path: sdd/多Agent并行编码规范（multi-agent-parallel）.md
+  summary: "多 Agent 分层并行编码的协作规范"
+  scope: all
+  stage: apply
+  load_policy: on-demand
+  triggers:
+    - "用户要求多 Agent、并行编码、分层并行实现或多人协作拆分"
+    - "当前变更被拆成多个可并行的实现责任区"
+
+# 系统架构与设计资料
+
+- path: system/系统整体架构（architecture-overview）.md
+  summary: "系统架构总览、技术栈、部署拓扑"
+  scope: all
+  stage: [proposal, specs, design]
+  load_policy: stage-start
+
+- path: system/系统模块与能力视图（system-structure-capability）.md
+  summary: "系统模块划分与各模块能力清单"
+  scope: all
+  stage: [proposal, specs, design]
+  load_policy: stage-start
+
+- path: system/核心业务分层模型（core-layered-model）.md
+  summary: "后端双栈分层架构模型（BSV + PSV）和跨栈调用规则"
+  scope: backend
+  stage: [design, tasks, apply]
+  load_policy: on-demand
+  triggers:
+    - "需要判断后端实现层次、PSV/BSV/SV/CSF/DAO/BO/Engine 职责"
+    - "设计或任务涉及跨栈调用、中心内 SV 复用、接口层与业务层边界"
+
+- path: system/系统交互关系与调用链（integration-map）.md
+  summary: "系统间交互关系、外部系统集成、调用链路"
+  scope: all
+  stage: [design, tasks, apply]
+  load_policy: on-demand
+  triggers:
+    - "设计涉及跨系统、跨中心、外部系统、网关、CSF、MQ 或 ET 调用链"
+    - "需要确认系统边界、中心职责、外部依赖或调用方向"
+
+- path: system/设计手册（design-playbooks）/
+  summary: "典型需求的端到端设计套路；两种命中模式：(1) 场景直接命中，(2) 作为其他场景子流程/扩展点的下钻指南被引用"
+  scope: all
+  stage: [design, tasks, apply]
+  load_policy: on-demand
+  triggers:
+    # 模式一：场景直接命中 — change 整体场景直接匹配某个 playbook 的适用域
+    - "需求整体属于某类已沉淀的典型场景（见 design-playbooks 目录 README 与具体 playbook 文件）"
+    - "需要判断端到端流程、开发点、配置点、人类决策点或场景级设计套路"
+    # 模式二：子流程/扩展点命中 — 主场景 playbook 的扩展点引用了子 playbook，且当前场景涉及该扩展点
+    - "主场景 playbook 的扩展点/证据矩阵中引用了子 playbook，或场景拆解后发现某子流程已有独立 playbook 需下钻设计"
+    # 具体技术关键词（同时覆盖直接命中和子流程命中）
+    - "需求出现外部系统接口、报文契约、字段映射、接口协商稿或 payload 组装"
+    - "需求出现 MQ/消息发送、消息类型、主题队列、异步通知或下游同步"
+    - "需求出现消息通知、通知模板、模板占位符或通知发送记录"
+    - "需求出现业务操作日志、审计日志或新增日志写入"
+
+- path: system/代码模式（code-patterns）/
+  summary: "真实代码裁剪的 CSF/SV/DAO/BO/ET/前端/测试代码模式；命中任务类型后按需加载"
+  scope: all
+  stage: [design, tasks, apply]
+  load_policy: on-demand
+  triggers:
+    - "需要实现或校准 CSF/SV/DAO/BO/ET/前端/测试代码写法"
+    - "需要探索现有组件、枚举、配置闭环或动态组件模式"
+    - "涉及 AppFrame2、BO/Engine/DAO、.bo datasource、CenterFactory、defaults.xml 数据源映射或新增 DAO 访问表"
+
+- path: system/系统接口目录（api-catalog）/
+  summary: "BFF 页面服务层现有接口清单；先读 README/summary，再按业务模块加载"
+  scope: [backend, frontend-h5, frontend-pc]
+  stage: [design, tasks, apply]
+  load_policy: on-demand
+  triggers:
+    - "需要寻找 BFF/页面服务层可复用接口、serviceCode 或页面接口清单"
+    - "前端/PSV 设计涉及接口复用、新增接口或接口出入参契约"
+
+- path: system/api-drilldown/
+  summary: "API 方法级下钻资料库；可先读总 README/层级 README 发现候选，具体方法文档必须按候选再加载"
+  scope: [backend, frontend-h5, frontend-pc]
+  stage: [design, tasks, apply]
+  load_policy: on-demand
+  triggers:
+    - "需要探索可复用 API、枚举、接口规格、方法签名或调用约束"
+    - "还不知道关键词但需要枚举某层 API 候选时，先读 README/L2 索引"
+    - "编码前需要确认具体 API 入参、出参、异常、调用示例"
+
+# 工程规范
+
+- path: engineering/编码规范与约定（coding-conventions）/
+  summary: "通用命名、分层边界、对象处理、异常、日志、注释；AppFrame2 数据层编码模式、BO配置、服务注册、Engine代码模板"
+  scope: all
+  stage: [design, tasks, apply]
+  load_policy: on-demand
+  triggers:
+    - "需要新增或修改代码、命名、异常、日志、注释、对象转换或通用编码风格"
+    - "apply 阶段实现前需要校准项目编码约定"
+    - "涉及 AppFrame2、BO/Engine/DAO、.bo datasource、ServiceFactory XML 注册、新增 DAO 访问表或 Engine SQL 拼装代码"
+
+- path: engineering/设计约束（design-conventions）.md
+  summary: "分层职责、接口复用、跨模块通信、缓存、事务、设计评审约束"
+  scope: all
+  stage: [design, tasks, apply]
+  load_policy: on-demand
+  triggers:
+    - "design/tasks 涉及分层职责、事务边界、缓存、接口复用、跨模块通信"
+    - "需要判断某逻辑应放在 CSF/SV/DAO/前端/PSV 哪一层"
+
+- path: engineering/接口设计规范（api-style-guide）.md
+  summary: "BSV/PSV/网关/跨中心接口分类、命名、参数、返回值、服务注册和复用流程"
+  scope: all
+  stage: [design, tasks, apply]
+  load_policy: on-demand
+  triggers:
+    - "涉及新增/修改/复用 CSF、BSV、PSV、网关、HTTP 接口或 serviceCode"
+    - "设计包含接口命名、参数、返回值、服务注册、跨中心调用或网关映射"
+
+- path: engineering/数据库设计规范（database-conventions）.md
+  summary: "表/字段命名、主键、索引、AppFrame2 BO/.bo/Engine、数据源路由、DAO落点、DDL 与 SQL 规范"
+  scope: backend
+  stage: [proposal, specs, design, tasks, apply]
+  load_policy: on-demand
+  triggers:
+    - "设计包含新增/修改表、字段、索引、DDL、DML、SQL 或数据迁移"
+    - "涉及 BO、DAO、Engine、AppFrame2 持久化、配置表、关系表、状态表或流水表"
+    - "tasks/apply 包含数据库层任务、SQL 文件、表结构或字段落库"
+    - "涉及访问现有表、新增 DAO、新建表、.bo datasource、defaults.xml、数据源配置表、数据源映射、DAO 逻辑库子包、CenterFactory 或分库路由"
+
+- path: engineering/测试策略与规范（testing-strategy）.md
+  summary: "Mock 单元测试、E2E 用例清单、测试数据、测试任务和验证报告规范"
+  scope: all
+  stage: [tasks, apply]
+  load_policy: on-demand
+  triggers:
+    - "需要拆分测试任务、测试策略、E2E 用例、测试数据、runner 或报告"
+    - "实现涉及用户流程、接口契约、异常路径、规则校验或回归验证"
+
+- path: engineering/BFF页面服务层编码指南（bff-coding-guide）.md
+  summary: "BFF/PSV 页面服务层编码模式、serviceCode 包装、前端接口承接和下游调用规范"
+  scope: backend
+  stage: [design, tasks, apply]
+  load_policy: on-demand
+  triggers:
+    - "涉及 BFF/PSV/页面服务层实现、serviceCode 包装、前端接口承接"
+    - "任务所在 repo/profile 标注为 BFF、PSV、页面服务层或前端服务入口"
+
+- path: engineering/BSV业务服务层编码指南（bsv-coding-guide）/
+  summary: "BSV 业务服务层工程结构、分层调用、跨 Center、分库路由和新增接口规范"
+  scope: backend
+  stage: [design, tasks, apply]
+  load_policy: on-demand
+  triggers:
+    - "任务所在 repo/profile 标注为 BSV、业务服务层或后端业务中心"
+    - "涉及 BSV 业务服务层、跨 Center 调用、新增 BSV 接口或内部 SV 编排"
+    - "需要按 BSV 工程结构定位 Service/SV/DAO/BO 实现"
+    - "需要判断 DAO 包路径、逻辑库子包、datasource、CenterFactory、分库路由或跨中心数据访问"
+
+- path: engineering/ET后台调度组件编码指南（et-dispatch-guide）.md
+  summary: "ET 后台调度组件类型、配置、幂等、状态维护、开发流程和测试清单"
+  scope: backend
+  stage: [design, tasks, apply]
+  load_policy: on-demand
+  triggers:
+    - "任务所在 repo/profile 标注为 ET、Task、后台调度中心，且涉及后台调度或异步处理"
+    - "涉及 ET、后台调度、Task、流程实例、前置/后置/参数补全组件"
+    - "涉及异步处理、幂等、失败重试、后台任务完成或 ET 配置任务"
+
+- path: engineering/前端通信协议规范（frontend-gateway-protocol）.md
+  summary: "H5/PC 前端到页面网关的 HTTP 通信协议、Header、AES、响应处理和调用差异"
+  scope: [frontend-h5, frontend-pc]
+  stage: [design, tasks, apply]
+  load_policy: on-demand
+  triggers:
+    - "涉及 PC/H5 前端调用 BFF/网关、HTTP 请求、Header、AES、响应处理或 mock 映射"
+    - "前端任务包含接口调用、路由/页面接入、签字页跳转或网关服务码"
+
+# 数据与业务
+
+- path: data/核心数据模型（data-model）/
+  summary: "数据域、实体关系、表业务含义索引和字段字典"
+  scope: all
+  stage: [proposal, specs, design, tasks, apply]
+  load_policy: on-demand
+  triggers:
+    - "需要理解核心表、实体关系、字段含义或数据域划分"
+    - "设计涉及数据模型、表归属、状态字段或关系表"
+
+- path: data/数据归属与主数据源（data-ownership）.md
+  summary: "数据归属规则、主数据源、中心逻辑库与跨中心写入约束"
+  scope: all
+  stage: [proposal, specs, design, tasks, apply]
+  load_policy: on-demand
+  triggers:
+    - "涉及数据写入、主数据归属、跨中心同步、数据源选择或谁负责落库"
+    - "设计需要判断某字段/表/业务对象属于哪个中心"
+    - "需要判断表属于哪个业务中心、数据域或逻辑库/datasource"
+
+- path: data/枚举值字典（enum-dictionary）.md
+  summary: "业务枚举值、状态码、类型编码字典"
+  scope: all
+  stage: [design, tasks, apply]
+  load_policy: on-demand
+  triggers:
+    - "涉及枚举值、状态码、类型编码、场景码、业务编码、配置编码或常量取值"
+    - "需要避免自行编造枚举、状态或类型值"
+
+- path: business/领域术语与业务对象（domain-glossary）.md
+  summary: "业务术语定义与领域对象说明"
+  scope: all
+  stage: [proposal, specs, design]
+  load_policy: on-demand
+  triggers:
+    - "需求包含领域术语、业务对象、对象边界或名词含义需要统一"
+    - "proposal/specs/design 需要定义术语、参与方、业务对象"
+
+- path: business/业务流程描述（business-process）.md
+  summary: "核心业务流程步骤、分支条件、异常处理"
+  scope: all
+  stage: [proposal, specs, design]
+  load_policy: on-demand
+  triggers:
+    - "需求涉及业务流程、步骤、分支条件、异常处理、前后台动作顺序"
+    - "需要把自然语言需求转成业务流程或流程图"
+
+- path: business/业务规则与核验体系（business-rules）.md
+  summary: "业务校验规则、约束条件、核验逻辑"
+  scope: all
+  stage: [specs, design, tasks]
+  load_policy: on-demand
+  triggers:
+    - "涉及业务校验、规则服务、准入条件、核验逻辑、限制条件或错误提示"
+    - "需要区分前端校验、业务校验、规则服务校验和后台处理校验"
+
+# 共享组件库
+
+- path: engineering/共享组件库约定（shared-components）.md
+  summary: "共享组件库（type=components）的包管理、版本策略、引用方式和兼容性约定"
+  scope: components
+  stage: [design, tasks, apply]
+  load_policy: on-demand
+  triggers:
+    - "涉及共享组件、组件库、UI 组件、工具库、业务组件、本地依赖、npm/Maven 私服"
+    - "变更影响被多仓库引用的公共模块或公共组件"
+    - "需要判断某模块是否应抽取为共享组件"
+
+# 安全与合规
+
+- path: security/安全与合规规范（security-rules）.md
+  summary: "安全编码规范与合规要求"
+  scope: all
+  stage: [design, apply]
+  load_policy: on-demand
+  triggers:
+    - "涉及敏感信息、手机号、证件号、客户资料、日志脱敏、权限、合规或安全风险"
+    - "前端展示、接口传输、日志记录或测试数据包含敏感字段"

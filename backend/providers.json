@@ -1,0 +1,40 @@
+{
+  "providers": [
+    {
+      "name": "zh-qwen-plus",
+      "language": "zh",
+      "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "api_key": "",
+      "model": "qwen-plus",
+      "temperature": 0.8,
+      "timeout": 60
+    },
+    {
+      "name": "en-openai-gpt4o",
+      "language": "en",
+      "base_url": "https://api.openai.com/v1",
+      "api_key": "",
+      "model": "gpt-4o",
+      "temperature": 0.8,
+      "timeout": 60
+    },
+    {
+      "name": "any-deepseek",
+      "language": "any",
+      "base_url": "https://api.deepseek.com/v1",
+      "api_key": "",
+      "model": "deepseek-chat",
+      "temperature": 0.8,
+      "timeout": 60
+    },
+    {
+      "name": "local-ollama-qwen",
+      "language": "any",
+      "base_url": "",
+      "api_key": "",
+      "model": "qwen2.5",
+      "temperature": 0.8,
+      "timeout": 120
+    }
+  ]
+}

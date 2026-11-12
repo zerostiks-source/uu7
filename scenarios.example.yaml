@@ -1,0 +1,104 @@
+# =============================================================================
+# scenarios.example.yaml
+#
+# context-bootstrap / scenario-mining 的「entry-guided」入口示例文件。
+#
+# 位置：aispec init / update 会自动分发到工作区根目录（与本文件同名）。
+#
+# 用法：
+#   aispec context bootstrap --entry scenarios.example.yaml
+#     → entry-guided：沿本文件声明的入口逐个下钻，抽取 design playbook / code-pattern
+#   复制为 scenarios.yaml 后修改，避免 update 覆盖示例：--entry scenarios.yaml
+#   aispec context bootstrap --entry        （不带文件）
+#     → open-discovery：由 Agent 从 profile + GitNexus 主动发现典型场景
+#
+# -----------------------------------------------------------------------------
+# 重要：格式不被 CLI 强校验，留有较大自由度
+# -----------------------------------------------------------------------------
+#   - CLI 仅检查「文件是否存在」，随后把路径交给 Agent，由 Agent 按
+#     context-bootstrap 技能（SKILL.md 的 ## scenario-mining + references/scenario-mining.md）理解。
+#   - 下面只是「推荐写法」。你可以增删字段、改键名、用扁平或嵌套结构；
+#     只要能让 Agent 定位到真实代码入口（至少 repo；file/class/method 可选）并理解业务动作即可。
+#
+# -----------------------------------------------------------------------------
+# 推荐字段
+# -----------------------------------------------------------------------------
+#   scenarios[]                场景列表
+#     name                     场景名 / 聚类名
+#     action                   业务动作：描述该场景执行的「大致流程」，
+#                              可跨越多个代码仓库；用于帮助 Agent 聚焦端到端
+#                              链路、抽取 playbook，而非逐行罗列代码。
+#     match_condition          [可选] playbook 命中条件说明：描述在什么业务场景、
+#                              需求特征或设计阶段下应该加载生成的 playbook。
+#                              Agent 会将此条件写入 playbook 的「何时加载」章节，
+#                              确保后续 AI 在设计/编码时能准确命中。
+#                              若不填，Agent 会根据 action 和代码证据自行推断。
+#     entrypoint[]             入口列表，支持「同一场景跨多个仓库的多个入口」
+#       repo                   [必填] 对齐 project-profile.yaml 的 repositories[].name
+#                              （即 GitNexus repo 名，不要用中文显示名）
+#       file                   [可选] 入口源码文件（相对仓库路径即可）
+#       class                  [可选] 精确定位到类；缺省时按文件/类族挖掘
+#       method                 [可选] 精确定位到方法；缺省时按接口族/类族挖掘
+#                                     并输出方法选择矩阵，不会因缺方法名而中断
+#
+#     当 entrypoint 只有 repo 而没有 file/class/method 时，Agent 会从仓库
+#     目录结构入手，结合 action 描述识别关键包/模块/入口类，自动发现挖掘路径。
+# =============================================================================
+
+scenarios:
+  # ---- 示例 1：单仓库，定位到具体方法，含 match_condition ----
+  - name: 加入家庭虚拟网
+    action: >
+      用户在 H5 发起加入家庭网申请 → family-virtual-net-boot 校验成员资格与配额 →
+      落库家庭网成员关系 → 调用规则中心校验并回写处理结果。
+    match_condition: >
+      当需求涉及「家庭网成员变更」类操作（加入/退出/转让）时加载此 playbook，
+      包括：新成员申请加入、老成员退网、群主转让等场景。
+    entrypoint:
+      - repo: family-virtual-net-boot
+        file: src/main/java/com/example/family/service/FamilyNetCSVImpl.java
+        class: com.example.family.service.FamilyNetCSVImpl
+        method: joinFamilyNet
+
+  # ---- 示例 2：同一业务场景跨多个仓库（多入口，端到端串联）----
+  - name: 统一下单回单
+    action: >
+      前端受理入口 home-boot 组装购物车与下单请求 → busi-comm-boot 统一下单 BFF 编排 →
+      order-center 落家庭订单 → 经 ESB 适配器回单并回写订单状态。
+      用于挖掘「跨中心下单回单」的端到端 playbook。
+    match_condition: >
+      当需求涉及「新建订单 + 外部系统回单」端到端流程时加载，
+      判断标志：需求提及下单、落单、回单、订单状态同步等关键词。
+    entrypoint:
+      - repo: home-boot
+        file: src/main/java/com/example/home/web/ShoppingCartController.java
+        method: submitOrder
+      - repo: busi-comm-boot
+        file: src/main/java/com/example/busicomm/service/IEsbSV.java
+      - repo: order-center
+        file: src/main/java/com/example/order/service/OrderSVImpl.java
+        class: com.example.order.service.OrderSVImpl
+        method: createOrder
+
+  # ---- 示例 3：最小写法，只给到 repo + file ----
+  - name: 规则集执行
+    action: 调用规则中心，按 ruleSetId 执行业务规则校验并返回结果，供其它中心复用。
+    match_condition: 当需求涉及业务规则校验、条件判断、资格检查等由规则引擎驱动的逻辑时加载。
+    entrypoint:
+      - repo: rule-center
+        file: src/main/java/com/example/rule/engine/RuleExecEngine.java
+        # 仅 file：class/method 由 Agent 在下钻时补全
+
+  # ---- 示例 4：仅指定 repo（无 file），Agent 从仓库结构出发挖掘 ----
+  - name: 批处理调度
+    action: >
+      定时/手动触发批处理作业 → 读取待处理队列 → 分批执行业务逻辑 →
+      记录执行结果与异常 → 更新处理状态。
+      用于挖掘批处理/定时任务类场景的通用设计模式。
+    match_condition: >
+      当需求含"批量处理"、"定时任务"、"后台调度"、"队列消费"等特征时加载。
+    entrypoint:
+      - repo: hall-center
+        # 未指定 file/class/method：Agent 将从仓库目录结构出发，
+        # 结合 action 描述，自动识别 Task/Job/Schedule 相关包和入口类，
+        # 然后沿调用链下钻抽取 playbook。

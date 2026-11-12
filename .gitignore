@@ -1,0 +1,18 @@
+# IDE / 本地工具缓存
+.trae/
+.vscode/
+.idea/
+
+# Python 缓存与虚拟环境
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 本机密钥与日志
+.env
+.env.*
+*.log
+
+# 本地历史遗留的无关演示页，不纳入本项目
+cck.html

@@ -1,0 +1,124 @@
+# =============================================================================
+# project-profile.yaml  (V2.1)
+# 项目画像：SDD 配置文件与 context 骨架的唯一动态数据源。
+# 修改后请运行 ai-sdd-update 刷新派生文件。
+# =============================================================================
+schema_version: "2.1"
+schema_changelog_ack: ""
+
+# -----------------------------------------------------------------------------
+# SDD 工作流配置
+# -----------------------------------------------------------------------------
+sdd:
+  design-mode: direct
+
+# -----------------------------------------------------------------------------
+# 项目基本信息
+# -----------------------------------------------------------------------------
+project:
+  name: "ai-rate-reducer"
+  display_name: "论文 AI 率降低工具"
+  description: "面向学术论文文本的 AI 痕迹检测与降重改写工具，在保持原意与学术规范的前提下降低论文 AI 生成率检测结果。"
+
+# -----------------------------------------------------------------------------
+# 仓库列表（多仓库工作区）
+# -----------------------------------------------------------------------------
+repositories:
+  - name: "ai-rate-reducer"
+    path: "."
+    type: "fullstack"
+    language: "python"
+    framework: "FastAPI + Vue 3"
+    display_name: "论文 AI 率降低工具"
+    gitnexus_index: "ai-rate-reducer"
+    frontend_type: "pc"
+    center_types:
+      - type: "PSV"
+        role: "页面服务层，承接前端文本提交与结果展示请求"
+      - type: "BSV"
+        role: "业务服务层，执行 AI 痕迹检测、改写策略与降重处理"
+
+# -----------------------------------------------------------------------------
+# 架构信息
+# -----------------------------------------------------------------------------
+architecture:
+  backend_layers:
+    - name: "数据层-数据库"
+      alias: "DB"
+      kind: "db"
+    - name: "数据层-实体"
+      alias: "Model/Entity"
+      kind: "entity"
+    - name: "数据层-数据访问"
+      alias: "DAO/Repository"
+      kind: "dao"
+    - name: "业务服务层-业务逻辑"
+      alias: "Service"
+      kind: "service"
+    - name: "接口层-对外接口"
+      alias: "API/Router"
+      kind: "gateway"
+    - name: "处理层-异步任务"
+      alias: "Task/Worker"
+      kind: "task"
+  build_tool: "pip + npm"
+  test_framework: "pytest + Vitest"
+
+# scopes: 默认由 repositories[].type 派生（backend + frontend-pc）
+
+# -----------------------------------------------------------------------------
+# 工具：MCP 服务 + MCP 客户端开关
+# -----------------------------------------------------------------------------
+tools:
+  api_registry_mcp:
+    endpoint: ""
+  gitnexus:
+    available: true
+  mcp_clients:
+    copilot: false
+    cursor: false
+    qoder: false
+    claude: false
+    opencode: false
+    trae: true
+  custom_mcp: []
+
+# -----------------------------------------------------------------------------
+# 前端配置
+# -----------------------------------------------------------------------------
+frontend:
+  h5:
+    framework: ""
+    source_root: ""
+  pc:
+    framework: "Vue 3 + Vite"
+    source_root: "frontend/src/"
+
+# -----------------------------------------------------------------------------
+# 路径配置
+# -----------------------------------------------------------------------------
+paths:
+  ddl_directory:          ".ai-sdd/artifacts/changes/{change-name}/sql/"
+  db_config_location:     ".ai-sdd/artifacts/changes/{change-name}/db/"
+  e2e_directory:          ".ai-sdd/artifacts/changes/{change-name}/e2e/"
+  test_source_directory:  ".ai-sdd/artifacts/changes/{change-name}/test-sources/{repo}/"
+  test_cases_directory:   ".ai-sdd/artifacts/changes/{change-name}/test-cases/{repo}/"
+  test_data_directory:    ".ai-sdd/artifacts/changes/{change-name}/test-data/{repo}/"
+  test_runner_directory:  ".ai-sdd/artifacts/changes/{change-name}/runners/{repo}/"
+  test_report_directory:  ".ai-sdd/artifacts/changes/{change-name}/reports/{repo}/"
+
+# -----------------------------------------------------------------------------
+# 上下文路径覆盖
+# -----------------------------------------------------------------------------
+context_overrides:
+  api_catalog_path: ""
+  api_drilldown_paths:
+    - "system/api-drilldown/"
+
+# -----------------------------------------------------------------------------
+# 数据库
+# -----------------------------------------------------------------------------
+database:
+  type: "postgresql"
+  charset: "UTF-8"
+  version: ""
