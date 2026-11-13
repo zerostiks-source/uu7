@@ -1,21 +1,22 @@
-"""模板化表达信号检测（启发式，不依赖外部检测服务）。
+"""行文特征指数检测（启发式，可复现、可追溯）。
 
-定位：只用于写作自检，帮助定位「可枚举的模板化表达」；**不是 AI 生成概率，
-不是分类器输出，也不是 Turnitin / 知网 / 维普等官方检测结果的估计值**。
+定位：量化可见的行文特征，帮助定位需要人工修订的段落；输出的是内部特征指数，
+不是分类器概率，也不替代任何机构检测结论。
 
-信号来源：
-- 突发性 Burstiness：句长变异系数（AI 文本常趋于均匀）
+特征来源：
+- 突发性 Burstiness：句长变异系数（程式化文本常趋于均匀）
 - 词汇丰富度 TTR：用词重复程度（短文本会失真，仅作弱信号）
-- 套话密度：中英文高频连接词/套语词典
-- 句式模板：中英文 AI 高频句式模式库（正则，可给出可读证据）
+- 套话密度：中英文高频连接词 / 套语词典
+- 句式模板：中英文高频句式模式库（正则，可给出可读证据）
 
-输出 0-100 的「信号强度」，并附带命中的具体证据。未命中不等于非 AI 生成。
+输出 0-100 的内部特征指数，并附带命中的具体证据。未命中表示行文未落入当前模板集合。
 """
 
 from __future__ import annotations
 
 import math
 import re
+from typing import Literal, TypedDict
 
 _SENT_SPLIT = re.compile(r"[。！？!?；;\n]+|(?<=[a-z0-9])\.\s+|(?<=[a-z0-9])\.$")
 _CJK = re.compile(r"[\u4e00-\u9fa5]")
@@ -65,9 +66,52 @@ _AI_PATTERNS_ZH: tuple[tuple[str, str], ...] = (
 )
 
 CAVEAT = (
-    "启发式信号只覆盖可枚举的模板化表达；未命中不代表文本不是 AI 生成，"
-    "也不代表能通过任何检测。请以官方检测报告与人工判断为准。"
+    "行文特征指数覆盖可枚举的模板化表达；未命中表示行文未落入当前模板集合。"
+    "指数用于修订定位，不作为来源判定或机构检测结论，请结合人工复核判断。"
 )
+
+
+class MetricItem(TypedDict):
+    """单项信号拆解。"""
+
+    key: str
+    label: str
+    score: float
+    weight: int
+    note: str
+
+
+class SentenceItem(TypedDict):
+    """逐句信号定位。"""
+
+    index: int
+    text: str
+    score: float
+    level: Literal["high", "medium", "low"]
+    hits: list[str]
+
+
+class StatsItem(TypedDict):
+    """文本统计。"""
+
+    chars: int
+    words: int
+    paragraphs: int
+    sentences: int
+    avg_sentence_len: float
+
+
+class DetectReport(TypedDict):
+    """自检报告结构，供 API 层直接映射到 DetectResponse。"""
+
+    score: float
+    language: str
+    metrics: list[MetricItem]
+    sentences: list[SentenceItem]
+    high_risk_count: int
+    pattern_hits: list[str]
+    caveat: str
+    stats: StatsItem
 
 
 def _detect_language(text: str) -> str:
@@ -129,15 +173,25 @@ def _signals(text: str, lang: str, sents: list[str]) -> dict[str, float]:
     mean_len = sum(lengths) / len(lengths) if lengths else 0.0
     variance = sum((l - mean_len) ** 2 for l in lengths) / len(lengths) if lengths else 0.0
     cv = (math.sqrt(variance) / mean_len) if mean_len else 0.0
-    burstiness = _clamp((1 - min(cv, 1.0)) * 100)
+    # 句长均匀度：以正常行文的 cv≈0.40 为零点，只有明显均匀（长短句失衡）才抬分
+    burstiness = _clamp(max(0.0, (0.40 - cv) / 0.40) * 100)
 
     words = _WORD.findall(text)
     ttr = len(set(words)) / len(words) if words else 1.0
-    diversity = _clamp((1 - min(ttr, 1.0)) * 100)
+    # 用词重复：以正常行文 TTR≈0.55 为零点（中文按 1-4 字切分 TTR 天然偏高），低于基线才计分
+    diversity = _clamp(max(0.0, (0.55 - ttr) / 0.55) * 100)
 
-    canned = _clamp(min(_canned_density(text, lang), 3.0) / 3.0 * 100)
-    density = _pattern_count(text, lang) / max(len(sents), 1)
-    patterns = _clamp(min(density, 0.8) / 0.8 * 100)
+    # 套话密度：分母 5.0，普通连接词偶发命中不显著抬分
+    canned = _clamp(min(_canned_density(text, lang), 5.0) / 5.0 * 100)
+    # 句式模板按「每 100 字」归一；零命中得 0 分（不做先验平滑，避免结构性地板）。
+    # 密度映射以 0.5 次/100 字为零点，偶发单次命中不抬分；
+    # 种类覆盖率要求命中 ≥2 类不同模板才抬分，避免单一偶发命中直接托底。
+    base = max(len(text) / 100.0, 1.0)
+    density = _pattern_count(text, lang) / base
+    table, _ = _pattern_table(lang)
+    kind_hits = _pattern_hits(text, lang)
+    kinds_cov = max(0.0, (len(kind_hits) - 1) / max(len(table) - 1, 1))
+    patterns = _clamp(max(max(0.0, (density - 0.5) / 0.5), kinds_cov) * 100)
 
     return {
         "burstiness": burstiness,
@@ -148,7 +202,7 @@ def _signals(text: str, lang: str, sents: list[str]) -> dict[str, float]:
 
 
 def score_text(text: str) -> float:
-    """返回 0-100 的模板化信号强度（启发式，不是 AI 生成概率）。"""
+    """返回 0-100 的行文特征指数（启发式，用于修订定位）。"""
     text = text.strip()
     if not text:
         return 0.0
@@ -177,7 +231,7 @@ def _canned_hits(text: str, lang: str) -> list[str]:
     return [word for word in dictionary if word in source]
 
 
-def _metrics(text: str, lang: str) -> list[dict[str, object]]:
+def _metrics(text: str, lang: str) -> list[MetricItem]:
     """拆解四项信号，供前端展示「哪类特征被命中」。"""
     sents = _sentences(text)
     s = _signals(text, lang, sents)
@@ -236,7 +290,7 @@ def _sentence_risk(sentence: str, lang: str, mean_len: float) -> tuple[float, li
     return round(_clamp(score), 1), hits
 
 
-def analyze_text(text: str, threshold: float = 55.0) -> dict[str, object]:
+def analyze_text(text: str, threshold: float = 55.0) -> DetectReport:
     """生成自检报告：信号强度、指标分解、命中证据、逐句定位与统计。"""
     clean = text.strip()
     if not clean:
@@ -254,16 +308,18 @@ def analyze_text(text: str, threshold: float = 55.0) -> dict[str, object]:
     lang = _detect_language(clean)
     sents = _sentences(clean)
     mean_len = sum(len(s) for s in sents) / len(sents) if sents else 0.0
-    items: list[dict[str, object]] = []
+    items: list[SentenceItem] = []
     for i, sent in enumerate(sents):
         risk, hits = _sentence_risk(sent, lang, mean_len)
-        level = "high" if risk >= threshold else ("medium" if risk >= 30 else "low")
+        level: Literal["high", "medium", "low"] = (
+            "high" if risk >= threshold else ("medium" if risk >= 30 else "low")
+        )
         items.append(
             {"index": i, "text": sent, "score": risk, "level": level, "hits": hits}
         )
 
     paragraphs = [p for p in re.split(r"\n\s*\n", clean) if p.strip()]
-    stats = {
+    stats: StatsItem = {
         "chars": len(re.sub(r"\s", "", clean)),
         "words": len(re.findall(r"[A-Za-z]+", clean)) if lang == "en" else len(re.sub(r"\s", "", clean)),
         "paragraphs": max(len(paragraphs), 1),

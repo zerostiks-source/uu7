@@ -10,6 +10,7 @@ Strength = Literal["light", "medium", "heavy"]
 Engine = Literal["auto", "llm", "local"]
 Style = Literal["academic", "concise", "natural"]
 Language = Literal["auto", "zh", "en"]
+DetectEngine = Literal["local", "llm"]
 
 
 class Segment(BaseModel):
@@ -20,6 +21,7 @@ class Segment(BaseModel):
 
 class DetectRequest(BaseModel):
     text: str = Field(..., description="待检测的论文文本")
+    engine: DetectEngine = "local"
 
 
 class SegmentScore(BaseModel):
@@ -52,9 +54,38 @@ class TextStats(BaseModel):
     avg_sentence_len: float = 0.0
 
 
+class ClassifierSegment(BaseModel):
+    index: int
+    score: float
+
+
+class ClassifierSentence(BaseModel):
+    """模型逐句判定的最可疑句子。"""
+
+    text: str
+    score: float
+
+
+class ClassifierVerdict(BaseModel):
+    """开源分类器给出的「模型疑似度」，与规则信号并列展示，不参与规则加权。"""
+
+    available: bool = False
+    model: str = ""
+    label: Literal["ai", "human", "unavailable"] = "unavailable"
+    probability: float = 0.0
+    note: str = ""
+    segments: list[ClassifierSegment] = Field(default_factory=list)
+    sentences: list[ClassifierSentence] = Field(default_factory=list)
+    segment_count: int = 0
+    high_ratio: float = 0.0
+    band: Literal["high", "medium", "low", "unavailable"] = "unavailable"
+    evidence_level: Literal["sufficient", "partial", "limited", "unavailable"] = "unavailable"
+    evidence: list[str] = Field(default_factory=list)
+
+
 class DetectResponse(BaseModel):
     score: float
-    source: Literal["proxy", "official"]
+    source: Literal["proxy", "llm", "official"]
     source_note: str
     segments: list[SegmentScore]
     language: str = "zh"
@@ -64,6 +95,7 @@ class DetectResponse(BaseModel):
     pattern_hits: list[str] = Field(default_factory=list)
     caveat: str = ""
     stats: TextStats = Field(default_factory=TextStats)
+    classifier: ClassifierVerdict = Field(default_factory=ClassifierVerdict)
 
 
 class RewriteRequest(BaseModel):
@@ -75,7 +107,7 @@ class RewriteRequest(BaseModel):
     language: Language = "auto"
     glossary: list[str] = Field(default_factory=list)
     only_high_risk: bool = False
-    high_risk_threshold: float = 55.0
+    high_risk_threshold: float = 35.0
     variant: int = 0
 
 

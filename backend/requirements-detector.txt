@@ -1,0 +1,11 @@
+# 可选依赖：开源分类器「模型疑似度」（/api/detect 的 classifier 字段）
+# 不装也能运行，接口会返回 available=false 并给出提示。
+#
+# CPU 版安装（推荐，体积小）：
+#   pip install -r backend/requirements-detector.txt \
+#       --extra-index-url https://download.pytorch.org/whl/cpu
+#
+# GPU 版：去掉上面的 extra-index-url，或换成 cu121 / cu124 的索引。
+torch>=2.2
+transformers>=4.44
+sentencepiece>=0.2

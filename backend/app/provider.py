@@ -43,7 +43,14 @@ _SYSTEM_PROMPT_ZH = (
     "包括方括号、圆括号、数字、百分号、上下标与单位。\n"
     "2. 不得新增事实、数据或结论，不得删除原文观点。\n"
     "3. 只输出改写后的正文，不要输出解释、说明或 Markdown 代码块。\n"
-    "4. 输出语言与原文一致。"
+    "4. 输出语言与原文一致。\n"
+    "5. 避免模板化套话：不要使用「随着…的发展」「首先/其次/再次」「综上所述」「总而言之」"
+    "「值得注意的是」「不难看出」「由此可见」「显而易见」「毋庸置疑」「日益凸显」"
+    "「具有重要意义」「发挥着…作用」「扮演着…角色」「一方面…另一方面」「不仅…而且」"
+    "「与此同时」「然而」「因此」「所以」「总的来说」「归根结底」等套话、连接词与对称句式，"
+    "也不要用新的套话替换旧套话。优先用具体动词、事实与细节替代这些空话。\n"
+    "6. 不要用「值得注意的是」「与此同时」这类过渡词起句，直接陈述事实或观点。\n"
+    "7. 打散句长节奏：长短句交错，避免连续多个字数接近的句子或机械排比。"
 )
 
 _SYSTEM_PROMPT_EN = (
@@ -54,7 +61,13 @@ _SYSTEM_PROMPT_EN = (
     "parentheses, numbers, percentages, superscripts, units and formulas.\n"
     "2. Do not add facts, data or conclusions, and do not remove the author's points.\n"
     "3. Output only the rewritten text: no explanations, no Markdown code fences.\n"
-    "4. Keep the output in the same language as the source."
+    "4. Keep the output in the same language as the source.\n"
+    "5. Avoid stock transitions and formulaic patterns: no 'Furthermore', 'Moreover', "
+    "'Additionally', 'Overall', 'In conclusion', 'It is worth noting that', "
+    "'This highlights/demonstrates/underscores...', 'plays a crucial role', "
+    "'not only ... but also'. Never replace one cliché with another.\n"
+    "6. Vary sentence length deliberately: mix short and long sentences instead of "
+    "uniform clauses or mechanical parallel lists."
 )
 
 
@@ -108,14 +121,24 @@ class LLMProvider:
                 "请直接输出改写后的正文。"
             )
 
+        return self.complete(system_prompt, user_prompt)
+
+    def complete(
+        self, system_prompt: str, user_prompt: str, temperature: float | None = None
+    ) -> str:
+        """通用 chat/completions 调用，供改写与检测共用。"""
+        if not self.config.is_ready():
+            raise LLMError(f"供应商 '{self.config.name}' 配置不完整")
+
         url = self.config.base_url.rstrip("/") + "/chat/completions"
         payload = {
             "model": self.config.model,
-            "temperature": self.config.temperature,
+            "temperature": self.config.temperature if temperature is None else temperature,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
+            **self.config.extra_body,
         }
         headers = {
             "Authorization": f"Bearer {self.config.api_key}",

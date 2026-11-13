@@ -12,6 +12,10 @@
 from __future__ import annotations
 
 import time
+from typing import Literal
+
+RewriteStatus = Literal["ok", "reverted", "failed"]
+from concurrent.futures import ThreadPoolExecutor
 
 from .config import settings
 from .detector import detect_language, score_text
@@ -24,6 +28,8 @@ from .segmenter import is_title, split_paragraphs
 # 判定"是否发生改写"的最低差异：字符相似度过高视为未改动
 _CHANGE_THRESHOLD = 0.98
 LOCAL_ENGINE_NAME = "local-rules"
+# 模型段落并行上限：逐段串行会让长文的等待时间线性增长
+_LLM_MAX_WORKERS = 3
 
 
 def _similarity(a: str, b: str) -> float:
@@ -76,9 +82,10 @@ def rewrite_text(
 ) -> tuple[list[RewrittenSegment], str, str]:
     """返回 (分段结果, 供应商展示名, 引擎标识)。language 可强制整篇按指定语言处理。"""
     paragraphs = split_paragraphs(text)
-    results: list[RewrittenSegment] = []
+    results: list[RewrittenSegment | None] = [None] * len(paragraphs)
     labels: list[str] = []
     engines: set[str] = set()
+    tasks: list[tuple[int, LLMProvider | None, str, list[str], str, str]] = []
 
     for idx, para in enumerate(paragraphs):
         lang = detect_language(para) if language == "auto" else language
@@ -90,15 +97,19 @@ def rewrite_text(
 
         # 标题段落不改写；精准模式下低风险段落原样保留
         if is_title(para) or (only_high_risk and score_text(para) < high_risk_threshold):
-            results.append(
-                RewrittenSegment(
-                    index=idx, original=para, rewritten=para,
-                    changed=False, locked_spans=locked, status="ok",
-                    language=lang, provider=label,
-                )
+            results[idx] = RewrittenSegment(
+                index=idx, original=para, rewritten=para,
+                changed=False, locked_spans=locked, status="ok",
+                language=lang, provider=label,
             )
             continue
+        tasks.append((idx, provider, para, locked, lang, label))
 
+    def _run(
+        task: tuple[int, LLMProvider | None, str, list[str], str, str],
+    ) -> tuple[int, str, RewriteStatus, str, list[str], str, str]:
+        idx, provider, para, locked, lang, label = task
+        status: RewriteStatus
         if provider is not None:
             rewritten, status = _rewrite_one(provider, para, strength, locked, style, lang)
         else:
@@ -106,22 +117,25 @@ def rewrite_text(
             status = "reverted" if verify_locked_spans(rewritten, locked) else "ok"
             if status == "reverted":
                 rewritten = para
+        return idx, rewritten, status, para, locked, lang, label
 
-        results.append(
-            RewrittenSegment(
-                index=idx,
-                original=para,
-                rewritten=rewritten,
-                changed=status == "ok" and _similarity(para, rewritten) < _CHANGE_THRESHOLD,
-                locked_spans=locked,
-                status=status,
-                language=lang,
-                provider=label,
-            )
-        )
+    if tasks:
+        workers = min(_LLM_MAX_WORKERS, len(tasks)) if any(t[1] is not None for t in tasks) else 1
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            for idx, rewritten, status, para, locked, lang, label in pool.map(_run, tasks):
+                results[idx] = RewrittenSegment(
+                    index=idx,
+                    original=para,
+                    rewritten=rewritten,
+                    changed=status == "ok" and _similarity(para, rewritten) < _CHANGE_THRESHOLD,
+                    locked_spans=locked,
+                    status=status,
+                    language=lang,
+                    provider=label,
+                )
 
     engine_name = "llm" if engines == {"llm"} else ("local" if engines == {"local"} else "mixed")
-    return results, " / ".join(labels) or LOCAL_ENGINE_NAME, engine_name
+    return [r for r in results if r is not None], " / ".join(labels) or LOCAL_ENGINE_NAME, engine_name
 
 
 def rewrite_paragraph(
@@ -155,7 +169,7 @@ def _rewrite_one(
     locked: list[str],
     style: str,
     language: str,
-) -> tuple[str, str]:
+) -> tuple[str, RewriteStatus]:
     """改写单段，返回 (文本, 状态)。状态：ok / reverted / failed。"""
     last_error: Exception | None = None
     for attempt in range(settings.max_retry + 1):

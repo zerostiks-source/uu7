@@ -2,6 +2,7 @@
 
 providers.json 中每条配置可用 language 标记 zh / en / any；
 改写时按段落语言选择对应供应商，未命中的语言回退 any，再回退本地引擎。
+api_key 可留空并改用 api_key_env 指定环境变量名，避免密钥写入配置文件。
 """
 
 from __future__ import annotations
@@ -12,6 +13,32 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+def _load_dotenv(path: Path) -> None:
+    """极简 .env 加载：只认 KEY=VALUE，不覆盖已存在的环境变量。"""
+    if not path.exists():
+        return
+    try:
+        lines = path.read_text(encoding="utf-8-sig").splitlines()
+    except OSError:
+        return
+    for raw in lines:
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        if key.startswith("export "):
+            key = key[len("export ") :].strip()
+        value = value.strip().strip("'\"")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+# 允许把本地密钥放在 backend/.env（已被 .gitignore 忽略），
+# 避免依赖终端是否重启过、是否继承到环境变量。
+_load_dotenv(BASE_DIR / ".env")
 
 
 def _normalize_language(value: str) -> str:
@@ -28,6 +55,7 @@ class ProviderConfig:
     temperature: float = 0.8
     timeout: float = 60.0
     language: str = "any"
+    extra_body: dict[str, object] = field(default_factory=dict)
 
     def is_ready(self) -> bool:
         if not (self.base_url and self.model):
@@ -89,14 +117,19 @@ def _load_providers_file(path: Path) -> dict[str, ProviderConfig]:
         name = item.get("name")
         if not name:
             continue
+        key_env = str(item.get("api_key_env", "")).strip()
+        api_key = (os.getenv(key_env, "") if key_env else "").strip()
+        if not api_key:
+            api_key = str(item.get("api_key", "")).strip()
         result[name] = ProviderConfig(
             name=name,
             base_url=item.get("base_url", ""),
-            api_key=item.get("api_key", ""),
+            api_key=api_key,
             model=item.get("model", ""),
             temperature=float(item.get("temperature", 0.8)),
             timeout=float(item.get("timeout", 60.0)),
             language=_normalize_language(item.get("language", "any")),
+            extra_body=item.get("extra_body") if isinstance(item.get("extra_body"), dict) else {},
         )
     return result
 

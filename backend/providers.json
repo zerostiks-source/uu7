@@ -28,6 +28,17 @@
       "timeout": 60
     },
     {
+      "name": "any-zhipu-glm",
+      "language": "any",
+      "base_url": "https://open.bigmodel.cn/api/paas/v4",
+      "api_key": "",
+      "api_key_env": "ZHIPU_API_KEY",
+      "model": "glm-5.3-flash",
+      "temperature": 0.8,
+      "timeout": 60,
+      "extra_body": { "reasoning_effort": "low" }
+    },
+    {
       "name": "local-ollama-qwen",
       "language": "any",
       "base_url": "",
